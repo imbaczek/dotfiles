@@ -1,0 +1,2 @@
+DIR 00;36 # directory
+ORPHAN 47;31;07 # symlink to nonexistent file

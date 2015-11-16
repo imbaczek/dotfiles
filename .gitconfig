@@ -1,0 +1,30 @@
+[color]
+  diff = auto
+  status = auto
+  branch = auto
+[core]
+  pager = less -XRMIQ
+  excludesfile = ~/.gitignore.global
+[merge]
+  tool = vimdiff
+[mergetool]
+  keepBackup = false
+[log]
+  decorate = short
+  abbrevCommit = true
+[alias]
+  ga  = log --graph --branches --tags --remotes
+  gas = log --graph --all
+  lg  = log --graph
+  pr  = pull --rebase
+  wd  = diff --word-diff --word-diff-regex=.
+  st  = status -sb
+  vim = !vim -p $(git ls-files -m)
+[diff]
+  tool = vimdiff
+[difftool]
+  prompt = false
+[push]
+  default = upstream
+[include]
+  path = .gitconfig.local
