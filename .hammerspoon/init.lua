@@ -7,7 +7,8 @@
 --   Ctrl-Opt-Cmd - P - 10 minutes of battery caffeination
 --   Ctrl-Opt-Cmd - O - Application shortcut hints
 --   Ctrl-Opt-Cmd - W - Open work applications and fix layout
---   Ctrl-Opt-Cmd - E - Close work applications
+--   Ctrl-Opt-Cmd - E - Fix layout of any running work applications
+--   Ctrl-Opt-Cmd - Q - Close work applications
 --
 --   Ctrl-Opt-Cmd - vim-movement - Vim-like window movement
 
@@ -135,9 +136,30 @@ hs.hotkey.bind(coc, 'k', function() if hs.window.focusedWindow() then hs.window.
 
 -- }}}
 
--- Battery caffeination - Ctrl-Opt-Cmd-P {{{
+-- Battery caffeination - Ctrl-Opt-Cmd-[ {{{
 
-hs.hotkey.bind(coc, 'p', nil, function()
+hs.hotkey.bind(coc, '[', nil, function()
+  if caffeineTimer then
+    caffeineTimer:stop()
+  end
+  if caffeineMenu then
+    hs.caffeinate.set('system',false,false)
+    caffeineMenu:delete()
+    caffeineMenu = nil
+  else
+    caffeineMenu = hs.menubar.new()
+    caffeineMenu:setTitle('Battery Caffineated')
+    hs.caffeinate.set('system',true,true)
+    caffeineTimer = hs.timer.doAfter(60*10, function()
+      hs.caffeinate.set('system',false,false)
+      caffeineMenu:delete()
+      caffeineMenu = nil
+    end)
+  end
+end)
+
+-- Battery caffeination - Ctrl-Opt-Cmd-]
+hs.hotkey.bind(coc, ']', nil, function()
   if caffeineTimer then
     caffeineTimer:stop()
   end
@@ -159,7 +181,7 @@ end)
 
 -- }}}
 
--- Open work applications - Ctrl-Opt-Cmd-W {{{
+-- Open and layout work applications - Ctrl-Opt-Cmd-W {{{
 
 hs.hotkey.bind(coc, 'w', nil, function()
 
@@ -178,64 +200,73 @@ hs.hotkey.bind(coc, 'w', nil, function()
   --
   -- otherwise, after opening the applications up hs.application.find won't
   -- find newly launched applications
-  hs.timer.doAfter(layout_delay, function()
-
-    -- layout work applications
-    for name,config in pairs(workApps) do
-      local app = hs.application.find(name)
-      if app then
-
-        -- unhide it if we are going to adjust it
-        if config.position or config.screen then
-          if app:isHidden() then
-            app:unhide()
-          end
-        end
-
-        local preferred_position = config.position
-
-        if config.screen then
-          s = scrn(config.screen)
-
-          -- if we can't find our preferred screen
-          -- use the fallback
-          if not s then
-            preferred_position = config.fallback
-            s = scrn()
-          end
-
-          if s then
-            hs.fnutils.each(app:visibleWindows(), function(w)
-              if w:screen():id() ~= s:id() then
-                w:moveToScreen(s)
-              end
-              w:setFrameInScreenBounds()
-            end)
-          end
-        end
-
-        if preferred_position then
-          local win = app:mainWindow()
-          if not app:isHidden() and win then
-            win:setFrame(hs.geometry.rect(preferred_position))
-          end
-        end
-
-        if config.hide then
-          app:hide()
-        end
-
-      end
-    end
-  end)
+  hs.timer.doAfter(layout_delay, layout_apps)
 
 end)
 
 -- }}}
 
--- Close work applications - Ctrl-Opt-Cmd-E {{{
+-- Layout any running work applications - Ctrl-Opt-Cmd-E {{{
 
 hs.hotkey.bind(coc, 'e', nil, function()
+  layout_apps()
+end)
+
+function layout_apps()
+  -- layout work applications
+  for name,config in pairs(workApps) do
+    local app = hs.application.find(name)
+    if app then
+
+      -- unhide it if we are going to adjust it
+      if config.position or config.screen then
+        if app:isHidden() then
+          app:unhide()
+        end
+      end
+
+      local preferred_position = config.position
+
+      if config.screen then
+        s = scrn(config.screen)
+
+        -- if we can't find our preferred screen
+        -- use the fallback
+        if not s then
+          preferred_position = config.fallback
+          s = scrn()
+        end
+
+        if s then
+          hs.fnutils.each(app:visibleWindows(), function(w)
+            if w:screen():id() ~= s:id() then
+              w:moveToScreen(s)
+            end
+            w:setFrameInScreenBounds()
+          end)
+        end
+      end
+
+      if preferred_position then
+        local win = app:mainWindow()
+        if not app:isHidden() and win then
+          win:setFrame(hs.geometry.rect(preferred_position))
+        end
+      end
+
+      if config.hide then
+        app:hide()
+      end
+
+    end
+  end
+end
+
+-- }}}
+
+-- Close work applications - Ctrl-Opt-Cmd-Q {{{
+
+hs.hotkey.bind(coc, 'q', nil, function()
   for name,config in pairs(workApps) do
     local app = hs.application.get(name)
     if app then
@@ -248,9 +279,11 @@ end)
 
 -- Change default printer based on wifi SSID {{{
 
-hs.wifi.watcher.new(function()
+wifiPrinterWatcher = hs.wifi.watcher.new(function()
   local wifi = hs.wifi.currentNetwork()
+  l.i("wifiPrinterWatcher invoked")
   if wifi then
+    l.i("  SSID is " .. wifi)
     for network,printer in pairs(printers) do
       if wifi == network then
         setPrinter(printer)
@@ -260,8 +293,11 @@ hs.wifi.watcher.new(function()
     if printers['default'] then
       setPrinter(printers['default'])
     end
+  else
+    l.i("  No SSID present")
   end
-end):start()
+end)
+wifiPrinterWatcher:start()
 
 -- }}}
 
@@ -300,6 +336,8 @@ end
 -- }}}
 
 -- Experiments {{{
+
+l = hs.logger.new('byrne','debug')
 
 -- hs.hotkey.bind(coc, 'a', nil, function()
 -- end)

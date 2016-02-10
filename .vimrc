@@ -23,12 +23,13 @@ silent! if plug#begin()
 
   Plug 'airblade/vim-gitgutter'
   Plug 'c9s/perlomni.vim', { 'for': 'perl' }
-  Plug 'ervandew/supertab'
   Plug 'junegunn/vim-easy-align'
+  Plug 'gabrielelana/vim-markdown'
   Plug 'kien/ctrlp.vim'
   Plug 'michaeljsmith/vim-indent-object'
   Plug 'rking/ag.vim'
   Plug 'stephpy/vim-yaml'
+  Plug 'tangledhelix/vim-kickstart'
   Plug 'thelocehiliosan/vim-byrne'
   Plug 'thelocehiliosan/vim-json'
   Plug 'tpope/vim-commentary'
@@ -50,13 +51,15 @@ silent! if plug#begin()
     Plug 'uguu-org/vim-matrix-screensaver'
     Plug 'yegappan/mru'
   endif
+  if v:version >= 704
+    Plug 'vim-pandoc/vim-pandoc-syntax'
+  endif
 
   " some plugins for the future?
-  " Plug 'junegunn/vim-peekaboo'  -- conflicts with some things, not sure why
-  " Plug 'Valloric/YouCompleteMe' -- requires newer vim, future perhaps?
-  " Plug 'scrooloose/syntastic'   -- possibly used for perl and puppet?
-  " Plug 'airblade/vim-gitgutter' -- perhaps use this in the future?
-  " Plug 'ajh17/VimCompletesMe'   -- not supported yet, but promising
+  " Plug 'junegunn/vim-peekaboo'     -- conflicts with some things, not sure why
+  " Plug 'Valloric/YouCompleteMe'    -- requires newer vim, future perhaps?
+  " Plug 'scrooloose/syntastic'      -- possibly used for perl and puppet?
+  " Plug 'ajh17/VimCompletesMe'      -- not supported yet, but promising
 
   call plug#end()
 endif
@@ -124,9 +127,13 @@ set shortmess+=I
 " MAPPINGS {{{
 " -----------------------------------------------------------------
 
+" reload .vimrc
+nnoremap <leader>v :so $MYVIMRC<cr>:echo ".vimrc reloaded"<cr>
+
 " column-minded editing
-nnoremap <leader>7 :set tw=70<cr>:set colorcolumn=70<cr>
-nnoremap <leader>8 :set tw&<cr>:set colorcolumn&<cr>
+nnoremap <leader>7 :set tw=70<cr>:set colorcolumn=70<cr>:echo "Textwidth=70 with marker"<cr>
+nnoremap <leader>8 :set tw=80<cr>:set colorcolumn&<cr>:echo "Textwidth=80"<cr>
+nnoremap <leader>0 :set tw&<cr>:set colorcolumn&<cr>:echo "Default textwidth"<cr>
 
 " checkboxes
 inoreabbrev cbox ☐
@@ -135,6 +142,9 @@ nnoremap <leader>cbx s☒<esc>
 nnoremap <leader>cbm s☑<esc>
 nnoremap <leader>cba s⇉<esc>
 nnoremap <leader>cm s✓<esc>
+
+" mkrpm unit tests
+nnoremap <leader>u :!mkrpm unit<cr>
 
 " git diffs during commits
 nnoremap <leader>gg :silent new diff.staged \| :set filetype=git-diff \| :r! git diff --cached -p --stat<cr>:se ro<cr>:set nospell \| :goto 1<cr>
@@ -165,7 +175,24 @@ vnoremap <tab> :sort<cr>
 nnoremap <tab> za
 
 " bullet extract (for status notes)
-nnoremap <leader>be :normal mx<cr> \| :let @a="" \| :'<,'>g/^-/yank A \| :nohlsearch \| :normal `x<cr> \| :normal "apdd<cr>
+function! BulletExtract()
+  let @a=""
+  normal G
+  ?^# Upcoming week
+  execute "silent! normal! vip:g/^* /yank A\<cr>"
+  call setreg('a', substitute(getreg('a'), '* ', '**', 'g'), getregtype('a'))
+  call setreg('a', substitute(getreg('a'), ':', ':**\n', 'g'), getregtype('a'))
+  normal G
+  ?^# Status notes
+  normal jd]]
+  normal "aP
+  nohlsearch
+endfunction
+nnoremap <leader>be :call BulletExtract()<cr>
+
+" TODO: Find these and replace with mdate
+" Upcoming week 2016-01-04
+" Status notes for week of 2016-01-04
 
 " quick tab navigation and preserve H/L using gH/gL (and add gM for consistency)
 nnoremap H gT
@@ -220,18 +247,15 @@ autocmd FileType gitrebase call RebaseCommandMaps()
 " AUTOCMD {{{
 " -----------------------------------------------------------------
 
+" keep mark V every time .vimrc is edited
+autocmd BufWrite,BufLeave *.vimrc normal! mV
+
 " keywords for special types
 autocmd FileType vim  set keywordprg=:help
 autocmd FileType perl set keywordprg=perldoc\ -f
 
-" no textwidth for text files
-autocmd BufRead *.txt set textwidth=0
-
 " preserve <tab> in makefiles
 autocmd FileType make set noexpandtab
-
-" auto spelling for markdown
-autocmd FileType mkd set spell
 
 " enforce formatting/spelling for git commit messages
 autocmd FileType gitcommit set tw=72 lbr spell
@@ -263,6 +287,18 @@ endif
 " PLUGIN CONFIGURATIONS {{{
 " -----------------------------------------------------------------
 
+" markdown configuration
+if v:version >= 704
+  let g:pandoc#syntax#conceal#use=0
+  augroup pandoc_syntax
+    autocmd! BufNewFile,BufFilePRe,BufRead *.md set filetype=markdown.pandoc tabstop=4 shiftwidth=4 smartindent autoindent fo+=tcq fo-=n comments-=b:* comments+=fb:* textwidth=80 spell
+  augroup END
+else
+  augroup markdown_syntax
+    autocmd! BufNewFile,BufFilePRe,BufRead *.md set filetype=markdown tabstop=4 shiftwidth=4 smartindent autoindent fo+=tcq fo-=n comments-=b:* comments+=fb:* textwidth=80 spell
+  augroup END
+endif
+
 " JSON syntax highlighting
 " prevent json content from jumping all over the place
 let g:vim_json_syntax_conceal = 0
@@ -283,8 +319,26 @@ nmap <leader>a <Plug>(EasyAlign)
 inoreabbrev lod ಠ_ಠ
 inoreabbrev sadface ʘ︵ʘ
 inoreabbrev tmyk ⋯-=≡★ ♪ The More You Know… ♫
+function! CalcMdate()
+  return system("perl -MDateTime -e '$dt = DateTime->today(); $dow = $dt->day_of_week(); $dt->subtract(days => ($dow+6)\%7); print $dt->date()'")[:-1]
+endfunction
+inoreabbrev mdate <c-r>=CalcMdate()<cr>
 inoreabbrev tdate <c-r>=strftime("%Y-%m-%d")<cr>
 inoreabbrev lorem Lorem ipsum dolor sit amet, consectetur adipiscing elit. Integer nec odio. Praesent libero. Sed cursus ante dapibus diam. Sed nisi. Nulla quis sem at nibh elementum imperdiet. Duis sagittis ipsum. Praesent mauris. Fusce nec tellus sed augue semper porta. Mauris massa. Vestibulum lacinia arcu eget nulla.<cr><cr>Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Curabitur sodales ligula in libero. Sed dignissim lacinia nunc. Curabitur tortor. Pellentesque nibh. Aenean quam. In scelerisque sem at dolor. Maecenas mattis. Sed convallis tristique sem. Proin ut ligula vel nunc egestas porttitor. Morbi lectus risus, iaculis vel, suscipit quis, luctus non, massa. Fusce ac turpis quis ligula lacinia aliquet. Mauris ipsum. Nulla metus metus, ullamcorper vel, tincidunt sed, euismod in, nibh.<cr><cr>Quisque volutpat condimentum velit. Class aptent taciti sociosqu ad litora torquent per conubia nostra, per inceptos himenaeos. Nam nec ante. Sed lacinia, urna non tincidunt mattis, tortor neque adipiscing diam, a cursus ipsum ante quis turpis. Nulla facilisi. Ut fringilla. Suspendisse potenti. Nunc feugiat mi a tellus consequat imperdiet. Vestibulum sapien. Proin quam. Etiam ultrices. Suspendisse in justo eu magna luctus suscipit. Sed lectus.
+
+" }}}
+" -----------------------------------------------------------------
+" EXPERIMENTS {{{
+" -----------------------------------------------------------------
+" experimental yank accumulation
+    "fresh yank
+nnoremap gYY "yyy
+    "append yank
+nnoremap gyy "Yyy
+    "put
+nnoremap <leader>p "yp
+    "PUT
+nnoremap <leader>P "yP
 
 " }}}
 " -----------------------------------------------------------------
